@@ -3,7 +3,7 @@ import  tarfile
 
 
 client = docker.from_env()
-container = client.containers.get("trusting_black")
+container = client.containers.get("c_")
 
 with tarfile.open("file.tar", "w") as tar:
     tar.add("main.c", arcname="main.c")
@@ -42,7 +42,8 @@ while  True:
         socket.output._sock.send(val)
     
     i =  i+ 1
-    
+socket =  container.exec_run('rm main.c' )
+socket =  container.exec_run('rm main' )
 
 
  
