@@ -73,9 +73,10 @@ async def python_file(sid, data):
 
     file_name,  file_data,  folder_name = storing_file_in_docker_container(
         data,  python_container, ".py")
-    socket = exec_state( container = "py" , cmd= "python3 ./" + folder_name+"/"+file_name, stdin=True, socket=True, tty=True)
+    socket ,exec_id  = exec_state( container = "py" , cmd= "python3 ./" + folder_name+"/"+file_name, stdin=True, socket=True, tty=True , stdout=True)
+    print(socket)
     storing_socket[file_name] = socket
-    return await sio.emit("file_exec",  {"file_name":  file_name,  'folder_name': folder_name, 'container_type':   "py"})
+    return await sio.emit("file_exec",  {"file_name":  file_name,  'folder_name': folder_name, 'container_type':   "py" , 'id' : exec_id['Id']})
 
 
 @sio.on("java_file")
@@ -109,7 +110,7 @@ async def java_file(sid, data):
 
 
 @sio.on("c_file")
-async def python_file(sid, data):
+async def c_file(sid, data):
 
     """
 
@@ -124,16 +125,16 @@ async def python_file(sid, data):
     file_name,  file_data,  folder_name = storing_file_in_docker_container(
         data,  c_container, ".c")
     
-    compile_data = exec_state(container="c_", cmd = "gcc ./" + folder_name+"/"+file_name +
-                                        " -o " + folder_name+"/"+folder_name, stdin=True, tty=True, socket=True)
-    error = compile_data.output._sock.recv(65000).decode()
+    compile_data  , _= exec_state(container="c_", cmd = "gcc ./" + folder_name+"/"+file_name +
+                                        " -o " + folder_name+"/"+folder_name, stdin=True, tty=True, socket=True , stdout= True)
+    error = compile_data._sock.recv(65000).decode()
     if error != "":
         return await sio.emit("compile_error", {'error': error})
 
-    socket = exec_state( container = "c_" , cmd="./" + folder_name+"/"+folder_name, stdin=True, socket=True, tty=True )
+    socket   , exec_id = exec_state( container = "c_" , cmd="./" + folder_name+"/"+folder_name, stdin=True, socket=True, tty=True  , stdout=True)
     storing_socket[file_name] = socket
 
-    return await sio.emit("file_exec",  {"file_name":  file_name,  'folder_name': folder_name, 'container_type':   "c"})
+    return await sio.emit("file_exec",  {"file_name":  file_name,  'folder_name': folder_name, 'container_type':   "c", 'id' : exec_id['Id']})
 
 
 @sio.on("give_me_data")
