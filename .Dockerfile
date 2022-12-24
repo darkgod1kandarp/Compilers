@@ -4,7 +4,7 @@ WORKDIR /
 
 COPY .   .
 
-RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
+RUN pip install -r tequirements.txt
 
 CMD [ "python3" ,  "main.py" ]
 
