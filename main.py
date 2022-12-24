@@ -73,8 +73,7 @@ async def python_file(sid, data):
 
     file_name,  file_data,  folder_name = storing_file_in_docker_container(
         data,  python_container, ".py")
-    socket = python_container.exec_run(
-        "python3 ./" + folder_name+"/"+file_name, stdin=True, socket=True, tty=True)
+    socket = exec_state( container = "py" , cmd= "python3 ./" + folder_name+"/"+file_name, stdin=True, socket=True, tty=True)
     storing_socket[file_name] = socket
     return await sio.emit("file_exec",  {"file_name":  file_name,  'folder_name': folder_name, 'container_type':   "py"})
 
@@ -125,14 +124,13 @@ async def python_file(sid, data):
     file_name,  file_data,  folder_name = storing_file_in_docker_container(
         data,  c_container, ".c")
     
-    compile_data = c_container.exec_run("gcc ./" + folder_name+"/"+file_name +
+    compile_data = exec_state(container="c_", cmd = "gcc ./" + folder_name+"/"+file_name +
                                         " -o " + folder_name+"/"+folder_name, stdin=True, tty=True, socket=True)
     error = compile_data.output._sock.recv(65000).decode()
     if error != "":
         return await sio.emit("compile_error", {'error': error})
 
-    socket = c_container.exec_run(
-        "./" + folder_name+"/"+folder_name, stdin=True, socket=True, tty=True )
+    socket = exec_state( container = "c_" , cmd="./" + folder_name+"/"+folder_name, stdin=True, socket=True, tty=True )
     storing_socket[file_name] = socket
 
     return await sio.emit("file_exec",  {"file_name":  file_name,  'folder_name': folder_name, 'container_type':   "c"})
