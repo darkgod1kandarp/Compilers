@@ -18,11 +18,12 @@ storing_socket = {}
 client = docker.from_env()
 python_container = client.containers.get("py")
 c_container = client.containers.get("c_")
+java_container = client.containers.get("java")
 
 app.mount("/", socket_app)
 
 
-def storing_file_in_docker_container(data, container):
+def storing_file_in_docker_container(data, container, type):
     """
 
     Args:
@@ -33,7 +34,7 @@ def storing_file_in_docker_container(data, container):
         (file_name :str ,file_data :str , folder_name:str)
     """
     file_name, file_data, folder_name = uuid.uuid1(
-    ).hex + ".c",  data, uuid.uuid1().hex + "_folder"
+    ).hex + type,  data, uuid.uuid1().hex + "_folder"
 
     convert.converting_data_uri_file(file_data,  file_name)
 
@@ -47,7 +48,15 @@ def storing_file_in_docker_container(data, container):
         container.put_archive("./"+folder_name, f)
     os.system('rm ' + uuid1.hex+".tar")
     os.system('rm ' + file_name)
-    return file_name,  file_data,  folder_name 
+    return file_name,  file_data,  folder_name
+
+def exec_state(cmd  =  "" , container  =  "" ,  socket  = False  , tty =  False  , stdin   = False  ,  stdout  =  False  , workdir  =  "/"  ):
+    if cmd=="" or container ==  "":
+        return "" 
+    exec_id  =   client.api.exec_create(container  = container  ,  cmd =  cmd  ,  stdout   =  stdout  ,  stdin =  stdin , workdir =  workdir , tty =  tty  )
+    return (client.api.exec_start(exec_id['Id'] ,  tty =  tty , socket  =  True) , exec_id)
+
+
 
 
 @sio.on("python_file")
@@ -62,10 +71,42 @@ async def python_file(sid, data):
 
     """
 
-    file_name,  file_data,  folder_name  =  storing_file_in_docker_container(data ,  python_container)
-    socket = python_container.exec_run("python3 ./" + folder_name+"/"+file_name, stdin=True, socket=True, tty=True)
+    file_name,  file_data,  folder_name = storing_file_in_docker_container(
+        data,  python_container, ".py")
+    socket = python_container.exec_run(
+        "python3 ./" + folder_name+"/"+file_name, stdin=True, socket=True, tty=True)
     storing_socket[file_name] = socket
     return await sio.emit("file_exec",  {"file_name":  file_name,  'folder_name': folder_name, 'container_type':   "py"})
+
+
+@sio.on("java_file")
+async def java_file(sid, data):
+
+    file_name,  file_data,  folder_name = storing_file_in_docker_container(
+        data,  java_container, ".java")
+    
+
+    error , _  = exec_state(container="java"  ,cmd  =  "javac ./"+folder_name+"/"+file_name, stdin=True, tty=True , stdout=True)
+    error =  error._sock.recv(65000).decode()
+    if error != "":
+        return await sio.emit("compile_error",  {'error': error})
+
+    finding_class_file_decoded , _ = exec_state(cmd   = "ls " + folder_name  ,  container="java" , socket=True  ,  tty=True  , stdin=True  , stdout=True )
+    finding_class_file_decoded =  finding_class_file_decoded._sock.recv(65000).decode()
+   
+    splitting_files = finding_class_file_decoded.split("  ")
+
+    if splitting_files[0].split(".")[1] == "class":
+        compile_file_name = splitting_files[0].split(".")[0]
+    else:
+        compile_file_name = splitting_files[1].rstrip().split(".")[0]
+
+    command = "java " + compile_file_name
+
+    socket ,exec_id = exec_state(cmd  =  command , container="java" ,  stdin=True  , stdout=True  ,  workdir="/"+folder_name , tty=True  , socket=True)
+
+    storing_socket[file_name] = socket
+    return await sio.emit("file_exec",  {"file_name":  file_name,  'folder_name': folder_name, 'container_type':   "java" , 'id' : exec_id['Id']})
 
 
 @sio.on("c_file")
@@ -81,13 +122,17 @@ async def python_file(sid, data):
 
     """
 
-    file_name,  file_data,  folder_name =  storing_file_in_docker_container(data ,  c_container)
-    compile_data = c_container.exec_run("gcc ./" + folder_name+"/"+file_name + " -o " + folder_name+"/"+folder_name, stdin=True, tty=True, socket=True)
+    file_name,  file_data,  folder_name = storing_file_in_docker_container(
+        data,  c_container, ".c")
+    
+    compile_data = c_container.exec_run("gcc ./" + folder_name+"/"+file_name +
+                                        " -o " + folder_name+"/"+folder_name, stdin=True, tty=True, socket=True)
     error = compile_data.output._sock.recv(65000).decode()
     if error != "":
         return await sio.emit("compile_error", {'error': error})
 
-    socket = c_container.exec_run("./" + folder_name+"/"+folder_name, stdin=True, socket=True, tty=True)
+    socket = c_container.exec_run(
+        "./" + folder_name+"/"+folder_name, stdin=True, socket=True, tty=True )
     storing_socket[file_name] = socket
 
     return await sio.emit("file_exec",  {"file_name":  file_name,  'folder_name': folder_name, 'container_type':   "c"})
@@ -97,20 +142,22 @@ async def python_file(sid, data):
 async def python_recieve_data(sid, data):
 
     socket = storing_socket[data['file_name']]
-
     try:
-        socket.output._sock.settimeout(2)
-        data = socket.output._sock.recv(65000)
-
+        exit_code = client.api.exec_inspect(data['id'])
+        
+        socket._sock.settimeout(2)
+        data = socket._sock.recv(65000)
         await sio.emit("sending_data",  data.decode())
+        if exit_code['Running']==False:
+            return  await sio.emit('file_ended')
+        
     except Exception as e:
-
+        print(e)
         await sio.emit("waiting_input")
 
 
 @sio.on("deleteing_file")
 async def file_deletion_from_continer(sid, data):
-    print(data)
     container_type,  folder_name = data['container_type'], data['folder_name']
     if container_type == "py":
         python_container.exec_run("rm -rf " + folder_name)
@@ -126,10 +173,9 @@ async def python_sending_data(sid, data):
     val = '{}\n'.format(data['data'])
     val = str.encode(val)
 
-    socket.output._sock.send(val)
+    socket._sock.send(val)
     await sio.emit("data_recv")
 
 
 if __name__ == "__main__":
-
     uvicorn.run("main:app", host="192.168.0.108", port=3000)
