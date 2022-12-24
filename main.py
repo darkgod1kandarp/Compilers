@@ -109,6 +109,23 @@ async def java_file(sid, data):
     return await sio.emit("file_exec",  {"file_name":  file_name,  'folder_name': folder_name, 'container_type':   "java" , 'id' : exec_id['Id']})
 
 
+@sio.on("c_plus")
+async def c_file(sid, data):
+    file_name,  file_data,  folder_name = storing_file_in_docker_container(
+        data,  c_container, ".cpp")
+    
+    compile_data  , _= exec_state(container="c_", cmd = "gcc ./" + folder_name+"/"+file_name +
+                                        " -o " + folder_name+"/"+folder_name, stdin=True, tty=True, socket=True , stdout= True)
+    error = compile_data._sock.recv(65000).decode()
+    if error != "":
+        return await sio.emit("compile_error", {'error': error})
+
+    socket   , exec_id = exec_state( container = "c_" , cmd="./" + folder_name+"/"+folder_name, stdin=True, socket=True, tty=True  , stdout=True)
+    storing_socket[file_name] = socket
+
+    return await sio.emit("file_exec",  {"file_name":  file_name,  'folder_name': folder_name, 'container_type':   "c_", 'id' : exec_id['Id']})
+
+
 @sio.on("c_file")
 async def c_file(sid, data):
 
@@ -156,15 +173,6 @@ async def python_recieve_data(sid, data):
         await sio.emit("waiting_input")
 
 
-@sio.on("deleteing_file")
-async def file_deletion_from_continer(sid, data):
-    container_type,  folder_name = data['container_type'], data['folder_name']
-    if container_type == "py":
-        python_container.exec_run("rm -rf " + folder_name)
-    elif container_type == "c":
-        c_container.exec_run("rm -rf " + folder_name)
-    await sio.emit("deleted")
-
 
 @sio.on("input_data")
 async def python_sending_data(sid, data):
@@ -175,6 +183,8 @@ async def python_sending_data(sid, data):
 
     socket._sock.send(val)
     await sio.emit("data_recv")
+
+
 
 
 if __name__ == "__main__":
