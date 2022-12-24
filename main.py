@@ -74,7 +74,7 @@ async def python_file(sid, data):
     file_name,  file_data,  folder_name = storing_file_in_docker_container(
         data,  python_container, ".py")
     socket ,exec_id  = exec_state( container = "py" , cmd= "python3 ./" + folder_name+"/"+file_name, stdin=True, socket=True, tty=True , stdout=True)
-    print(socket)
+  
     storing_socket[file_name] = socket
     return await sio.emit("file_exec",  {"file_name":  file_name,  'folder_name': folder_name, 'container_type':   "py" , 'id' : exec_id['Id']})
 
@@ -134,7 +134,7 @@ async def c_file(sid, data):
     socket   , exec_id = exec_state( container = "c_" , cmd="./" + folder_name+"/"+folder_name, stdin=True, socket=True, tty=True  , stdout=True)
     storing_socket[file_name] = socket
 
-    return await sio.emit("file_exec",  {"file_name":  file_name,  'folder_name': folder_name, 'container_type':   "c", 'id' : exec_id['Id']})
+    return await sio.emit("file_exec",  {"file_name":  file_name,  'folder_name': folder_name, 'container_type':   "c_", 'id' : exec_id['Id']})
 
 
 @sio.on("give_me_data")
@@ -145,13 +145,14 @@ async def python_recieve_data(sid, data):
         exit_code = client.api.exec_inspect(data['id'])
         
         socket._sock.settimeout(2)
-        data = socket._sock.recv(65000)
-        await sio.emit("sending_data",  data.decode())
+        recv_data = socket._sock.recv(65000)
+        await sio.emit("sending_data",  recv_data.decode())
         if exit_code['Running']==False:
+            container_type,  folder_name = data['container_type'], data['folder_name']
+            deleteing_file ,  _  = exec_state(cmd = "rm -rf " + folder_name , container= container_type ,  socket=True  ,  tty  =  True , stdin=True  , stdout=True    )
             return  await sio.emit('file_ended')
         
     except Exception as e:
-        print(e)
         await sio.emit("waiting_input")
 
 
