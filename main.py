@@ -25,6 +25,22 @@ MAX_BUFFER = 65000
 
 
 def exec_state(cmd="", container="",  socket=False, tty=False, stdin=False,  stdout=False, workdir="/"):
+    """
+    This function will  execute the task like it does in cmd  
+
+    Args:
+        cmd (str): [Which command to be executed]. Defaults to "".
+        container (str): [In which container command is to be executed]. Defaults to "".
+        socket (bool): [Socket attached to command line of the socker interface]. Defaults to False.
+        tty (bool): [For any out put you want to see from the command line you have to set it true]. Defaults to False.
+        stdin (bool): [If you want to give any input in docket interface command lien you have to use  stdin]. Defaults to False.
+        stdout (bool): [If you want output you have to set it true ]. Defaults to False.
+        workdir (str): [In which directory you have to work]. Defaults to "/".
+
+    Returns:
+        [socket]: [raw socket of python]
+        [object]:[dictionary in which key "ID" is there for the particular process]
+    """
     if cmd == "" or container == "":
         return ""
     exec_id = client.api.exec_create(
@@ -33,6 +49,17 @@ def exec_state(cmd="", container="",  socket=False, tty=False, stdin=False,  std
 
 
 def error_state(container: str, cmd: str, workdir="/"):
+    """
+    This Function will run the  exec_state which do not require socket 
+
+    Args:
+        container (str): [In which container command is to be executed]
+        cmd (str): [Which command to be executed]
+        workdir (str): [In which directory you have to work]. Defaults to "/".
+
+    Returns:
+        [string | boolean]: [If there is error then it will send error and if there is no error then it will send False]
+    """
     if cmd == "" or container == "":
         return "data  or container  should be there"
     error, _ = exec_state(container=container, cmd=cmd,
@@ -45,6 +72,16 @@ def error_state(container: str, cmd: str, workdir="/"):
 
 
 def creating_folder_or_file(container: str, name: str,  folder_t_file_f: bool = True,  workdir="/"):
+    """
+    This function  will run the create the folder or file in docker container  
+    Args:
+        container (str): [In which container command is to be executed]
+        name (str): [Name of the file or folder that you want to store ]
+        folder_t_file_f (bool): [True For creating Folder and False for Creating File]. Defaults to True.
+        workdir (str): [In which directory you have to work]. Defaults to "/".
+    Returns:
+        [string | boolean]: [If there is error then it will send error and if there is no error then it will send False]
+    """
     if folder_t_file_f:
         cmd = 'mkdir ' + name
         error = error_state(container=container,  cmd=cmd, workdir=workdir)
@@ -60,6 +97,19 @@ def creating_folder_or_file(container: str, name: str,  folder_t_file_f: bool = 
 
 
 def delete_folder_or_file(container: str, name: str,  folder_t_file_f: bool = True,  workdir="/"):
+    """
+        This Function will delete the folder in docker container 
+
+    Args:
+        container (str): [In which container command is to be executed]
+        name (str): [Name of the file or folder that you want to store ]
+        folder_t_file_f (bool, optional): [description]. Defaults to True.
+        workdir (str): [In which directory you have to work]. Defaults to "/".
+
+
+    Returns:
+        [string | boolean]: [If there is error then it will send error and if there is no error then it will send False]
+    """
     if folder_t_file_f:
         if not name:
             return "Folder name required"
@@ -72,6 +122,19 @@ def delete_folder_or_file(container: str, name: str,  folder_t_file_f: bool = Tr
 
 
 def writing_file(file_name: str, data: str,  container:  str,  workdir: str = "/"):
+    """
+    This FUnction will write  in File in docker container 
+
+    Args:
+        file_name (str): [File Name in which we have to write]
+        data (str): [Data you have to writein that file]
+        container (str): [Container name]
+        workdir (str): [In which directory you have to work]. Defaults to "/".
+
+    Returns:
+        [string | boolean]: [If there is error then it will send error and if there is no error then it will send False]
+
+    """
     if file_name == "":
         return "File name should be there"
     socket,  _ = exec_state(cmd="tee " + file_name,  container=container,
@@ -85,6 +148,13 @@ def writing_file(file_name: str, data: str,  container:  str,  workdir: str = "/
 
 @sio.on('writing_file')
 async def file_writing(sid, data):
+    """
+    This emit method will execute the writtg
+
+    Args
+        sid ([socket]): [raw socket for emitting the data ]
+        data ([Object]): [Object{file_name :str , data:str , container :enum("c_" , "java" , "py") , workdir:str}]
+    """
     writing_file(file_name=data['file_name'],  data=data['data'],
                  container=data['container'],  workdir=data['workdir'])
     await sio.emit("file_writing_done")
@@ -93,6 +163,14 @@ async def file_writing(sid, data):
 
 @sio.on('running_file')
 async def running_file(sid, data):
+    """
+    This emit method  will run the file 
+
+    Args:
+        sid ([socket]): [raw socket for emitting the data ]
+
+        data ([Object]): [Object{container:str  ,  file_name:str  , folder_path :str}]
+    """
     CMD = {'py':  'python3 ',  'java': 'java ',  'c_':  './'}
 
     if data['container'] == "java":
@@ -132,6 +210,14 @@ async def running_file(sid, data):
 
 @sio.on("create_folder_file")
 async def create_file_folder(sid, data):
+
+    """
+    This listener method will run Create_folder_file 
+
+    Args:
+        sid ([socket]): [raw socket for emitting the data ]
+        data ([Object]) ::[Object({folder_t_file_f:bool   ,  workdir:str  , name :str })]
+    """
     error = creating_folder_or_file(
         container=data['container'],  folder_t_file_f=data['folder_t_file_f'],  workdir=data['workdir'], name=data['name'])
     return await sio.emit("file_created_not",  error)
@@ -139,6 +225,16 @@ async def create_file_folder(sid, data):
 
 @sio.on('delete_folder')
 async def delete_file_folder(sid, data):
+    """
+
+    This listener method will run delete folder Function  
+
+    Args:
+        sid ([socket]): [raw socket for emitting the data ]
+        data ([Object]): [Object({folder_t_file_f:bool   , workdir  :str , name  :str})]
+
+ 
+    """
     error = delete_folder_or_file(
         container=data['container'],  folder_t_file_f=data['folder_t_file_f'],  workdir=data['workdir'],  name=data['name'])
     return await sio.emit("file_deleted_not", error)
@@ -146,6 +242,15 @@ async def delete_file_folder(sid, data):
 
 @sio.on("give_me_data")
 async def python_recieve_data(sid, data):
+    """
+     This listener will run the the required file 
+
+    Args:
+        sid ([socket]): [raw socket for emitting the data ]
+        data ([Object]): [Object({folder_path :str  ,  file_name  :str })]
+
+   
+    """
 
     socket = storing_socket[data['folder_path'] + data['file_name']]
     try:
@@ -164,7 +269,7 @@ async def python_recieve_data(sid, data):
             return await sio.emit('file_ended')
 
     except Exception as e:
-        print(e)
+   
         await sio.emit("waiting_input")
 
 
