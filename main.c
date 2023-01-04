@@ -7,7 +7,7 @@ int main()
 
 
 	int val ;
-	printf("Enter the Word: ")
+   printf("Enter the Word: ");
    printf("\n");
    printf("\n");
    printf("\n");
